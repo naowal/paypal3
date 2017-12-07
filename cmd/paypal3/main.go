@@ -3,14 +3,16 @@ package main
 import (
 	"fmt"
 	"html/template"
-	"io/ioutil"
 	"log"
 	"net/http"
-	"os/exec"
+	//"os/exec"
 	"strings"
 
 	"github.com/logpacker/PayPal-Go-SDK"
 )
+
+var C, _ = paypalsdk.NewClient("AV2aAlW78rnvuU8EV92wLVsQTnusENXSJJCLSCxo6kUd0nU84ZWdjOoAkt1JNuPP7bk5t3jQ-Wky3on-",
+	"EMqdZcKB21emXae8R97HuKzOOISIrnppX06ILsZetgTllfO9hakMr7MvLE548LkqPsKq-Khv7c1UFRMz", paypalsdk.APIBaseSandBox)
 
 func sayhelloName(w http.ResponseWriter, r *http.Request) {
 	r.ParseForm()       // parse arguments, you have to call this by yourself
@@ -36,17 +38,43 @@ func success(w http.ResponseWriter, r *http.Request) {
 		fmt.Println("val:", strings.Join(v, ""))
 	}
 
-	//payment, err := C.GetPayment(paymentResult.ID)
-	//fmt.Println(payment)
-	//fmt.Println(paymentResult.ID)
-	//fmt.Println(payment.Payer)
-	//paymentID := paymentResult.ID
-	//payerID := payment.Payer.PayerInfo.PayerID
-	//executeResult, err := C.ExecuteApprovedPayment(paymentID, payerID)
-	//fmt.Println(executeResult)
 	t, _ := template.ParseFiles("success.gtpl")
 	t.Execute(w, nil)
 
+	//print in client side
+	fmt.Fprintln(w, "PayerID= "+r.FormValue("PayerID"))
+	fmt.Fprintln(w, "paymentId= "+r.FormValue("paymentId"))
+
+	PayerID := r.FormValue("PayerID")
+	paymentId := r.FormValue("paymentId")
+
+	//getpayment from payment Id
+	payment, _ := C.GetPayment(paymentId)
+
+	//print in console
+	fmt.Println("payment createtime : ", payment.CreateTime)
+	fmt.Println("payment transactions : ", payment.Transactions)
+	fmt.Println("payment  ExperienceProfileID: ", payment.ExperienceProfileID)
+	fmt.Println("payment ID: ", payment.ID)
+	fmt.Println("payment Intent: ", payment.Intent)
+	fmt.Println("payment State: ", payment.State)
+	fmt.Println("payment UpdateTime: ", payment.UpdateTime)
+	fmt.Println("payment payer FundingInstruments : ", payment.Payer.FundingInstruments)
+	fmt.Println("payment payer payerInfo : ", payment.Payer.PayerInfo)
+	fmt.Println("payment payer Status : ", payment.Payer.Status)
+	fmt.Println("payment payer PaymentMethod : ", payment.Payer.PaymentMethod)
+
+	//Approved payment process
+	executeResult, _ := C.ExecuteApprovedPayment(paymentId, PayerID)
+
+	//print Approved Payment from console
+	fmt.Println("executeResult : ", executeResult)
+	fmt.Println("executeResult ID : ", executeResult.ID)
+	fmt.Println("executeResult Links : ", executeResult.Links)
+	fmt.Println("executeResult State : ", executeResult.State)
+	fmt.Println("executeResult Transactions: ", executeResult.Transactions)
+
+	//print to client side
 	fmt.Fprintf(w, "Payment success!") // send data to client side
 }
 
@@ -95,15 +123,14 @@ func redirect(w http.ResponseWriter, r *http.Request) {
 func OpenPayment(w http.ResponseWriter, r *http.Request, balance string) {
 
 	// In sandbox , Add my Own clientID and secretID
-	C, err := paypalsdk.NewClient("AV2aAlW78rnvuU8EV92wLVsQTnusENXSJJCLSCxo6kUd0nU84ZWdjOoAkt1JNuPP7bk5t3jQ-Wky3on-",
-		"EMqdZcKB21emXae8R97HuKzOOISIrnppX06ILsZetgTllfO9hakMr7MvLE548LkqPsKq-Khv7c1UFRMz", paypalsdk.APIBaseSandBox)
-	if err != nil {
-		panic(err)
-	}
+	//C, err := paypalsdk.NewClient("AV2aAlW78rnvuU8EV92wLVsQTnusENXSJJCLSCxo6kUd0nU84ZWdjOoAkt1JNuPP7bk5t3jQ-Wky3on-",
+	//	"EMqdZcKB21emXae8R97HuKzOOISIrnppX06ILsZetgTllfO9hakMr7MvLE548LkqPsKq-Khv7c1UFRMz", paypalsdk.APIBaseSandBox)
+	//if err != nil {
+	//	panic(err)
+	//}
 
 	// Retrieve access token
-	accessToken, err := C.GetAccessToken()
-
+	_, err := C.GetAccessToken()
 	if err != nil {
 		panic(err)
 	}
@@ -113,59 +140,30 @@ func OpenPayment(w http.ResponseWriter, r *http.Request, balance string) {
 		Total:    balance, //parse form amount field
 		Currency: "USD",
 	}
-	redirectURI := "www.google.com"
-	cancelURI := "www.facebook.com"
+	redirectURI := "http://localhost:8080/success"
+	cancelURI := "http://localhost:8080/deny"
 	description := "Leaptips following payment"
 	paymentResult, err := C.CreateDirectPaypalPayment(amount, redirectURI, cancelURI, description)
-
-	// Just debug in console by printing
-	fmt.Println()
-	fmt.Println("Token: ", accessToken.Token)
-	fmt.Println(paymentResult.Links[0].Rel)
-	fmt.Println(paymentResult.Links[0].Href)
-	fmt.Println(paymentResult.Links[0].Method)
-	fmt.Println(paymentResult.Links[0].Enctype)
-	fmt.Println()
-	fmt.Println(paymentResult.Links[1].Rel)
-	fmt.Println(paymentResult.Links[1].Href)
-	fmt.Println(paymentResult.Links[1].Method)
-	fmt.Println(paymentResult.Links[1].Enctype)
-	fmt.Println()
-	fmt.Println(paymentResult.Links[2].Rel)
-	fmt.Println(paymentResult.Links[2].Href)
-	fmt.Println(paymentResult.Links[2].Method)
-	fmt.Println(paymentResult.Links[2].Enctype)
-
-	// open approvel url -> paypal for payment
-	exec.Command("xdg-open", paymentResult.Links[1].Href).Run()
-	//resp, err := http.Post(paymentResult.Links[2].Href)
-
-	url := paymentResult.Links[0].Href
-	response, err := http.Get(url)
 	if err != nil {
-		log.Fatal(err)
+		panic(err)
 	}
-	defer response.Body.Close()
-
-	responseData, err := ioutil.ReadAll(response.Body)
-	if err != nil {
-		log.Fatal(err)
+	// find approval_url
+	for _, l := range paymentResult.Links {
+		if l.Rel == "approval_url" {
+			http.Redirect(w, r, l.Href, http.StatusFound)
+			return
+		}
 	}
-
-	responseString := string(responseData)
-	fmt.Fprint(w, responseString)
-
-	//redirecttopaypal(w, r, paymentResult.Links[1].Href)
-	// So, Next ?? How am I will do. with accessToken and paymentResult
+	return
 
 	payment, err := C.GetPayment(paymentResult.ID)
-	fmt.Println(payment)
-	fmt.Println(paymentResult.ID)
-	fmt.Println(payment.Payer)
+	//fmt.Println("payment : " + payment)
+	fmt.Println("paymentResult.ID: " + paymentResult.ID)
+	//fmt.Println("payment.Payer: " + payment.Payer)
 	paymentID := paymentResult.ID
 	payerID := payment.Payer.PayerInfo.PayerID
-	fmt.Println(paymentID)
-	fmt.Println(payerID)
+	fmt.Println("paymentID : " + paymentID)
+	fmt.Println("payerID : " + payerID)
 	executeResult, err := C.ExecuteApprovedPayment(paymentID, payerID)
 	fmt.Println(executeResult)
 
